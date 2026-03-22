@@ -58,7 +58,7 @@ async function processPlayer(player, client) {
   // 1. Fetch battle log
   const battles = await getBattleLog(player.tag);
 
-  // 2. Filter to ranked battles only
+  // 2. Filter to team ranked battles only (bo3 format in mythic+)
   const rankedBattles = battles.filter(b =>
     b.battle && b.battle.type === 'ranked',
   );

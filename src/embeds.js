@@ -21,9 +21,10 @@ function buildSetEmbed(set, battles, playerTag) {
     .setTitle(`${isVictory ? '🏆' : '💀'} Ranked Set — ${resultText}`)
     .setDescription(`${modeEmoji(mode)} **${formatModeName(mode)}** on **${mapName}**\n\n📊 **Set Score: ${set.wins} - ${set.losses}**`);
 
-  // Map image as the main image
+  // Map image as the large header image
   if (mapImage) {
     embed.setImage(mapImage);
+    embed.setAuthor({ name: mapName, iconURL: mapImage });
   }
 
   // Individual game results with brawlers played
