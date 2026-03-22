@@ -41,31 +41,24 @@ module.exports = {
       return;
     }
 
-    const { overall, setStats, byBrawler } = stats;
-    const overallWR = formatWinRate(overall.wins, overall.total);
+    const { overall, byBrawler } = stats;
+    const wr = formatWinRate(overall.wins, overall.total);
     const starRate = formatWinRate(overall.star_player_count, overall.total);
-    const setWR = setStats.total > 0
-      ? formatWinRate(setStats.wins, setStats.total)
-      : 'N/A';
 
-    // Overall stats column
+    // Overall stats column (set-based)
     const overallLines = [
-      `🏆 **Wins:** ${overall.wins}`,
-      `💀 **Losses:** ${overall.losses}`,
-      `📊 **Game WR:** ${overallWR}`,
-      '',
-      `📦 **Sets Won:** ${setStats.wins}`,
-      `📦 **Sets Lost:** ${setStats.losses}`,
-      `📊 **Set WR:** ${setWR}`,
+      `🏆 **Sets Won:** ${overall.wins}`,
+      `💀 **Sets Lost:** ${overall.losses}`,
+      `📊 **Win Rate:** ${wr}`,
       '',
       `⭐ **Star Player:** ${overall.star_player_count}/${overall.total} (${starRate})`,
     ];
 
-    // Per-brawler column (top 15)
+    // Per-brawler column (top 15, set-based)
     const brawlerLines = byBrawler.slice(0, 15).map(b => {
-      const wr = formatWinRate(b.wins, b.total);
+      const bwr = formatWinRate(b.wins, b.total);
       const sp = b.star_player_count > 0 ? ` ⭐${b.star_player_count}` : '';
-      return `**${b.brawler_name}**: ${b.wins}W-${b.losses}L (${wr})${sp}`;
+      return `**${b.brawler_name}**: ${b.wins}W-${b.losses}L (${bwr})${sp}`;
     });
 
     if (brawlerLines.length === 0) {
@@ -87,7 +80,7 @@ module.exports = {
           inline: true,
         },
       )
-      .setFooter({ text: `${overall.total} games tracked • ${setStats.total} sets completed` });
+      .setFooter({ text: `${overall.total} sets tracked` });
 
     await interaction.editReply({ embeds: [embed] });
   },

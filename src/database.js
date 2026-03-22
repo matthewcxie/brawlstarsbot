@@ -227,33 +227,38 @@ function forceCompleteSet(setId) {
 // ── Stats Queries ──
 
 function getPlayerStats(playerTag) {
+  // Set-based stats (W/L per completed set, not per game)
   const overall = db.prepare(`
     SELECT
       COUNT(*) as total,
-      SUM(CASE WHEN result = 'victory' THEN 1 ELSE 0 END) as wins,
-      SUM(CASE WHEN result = 'defeat' THEN 1 ELSE 0 END) as losses,
-      SUM(is_star_player) as star_player_count
-    FROM battles WHERE player_tag = ?
+      SUM(CASE WHEN s.result = 'victory' THEN 1 ELSE 0 END) as wins,
+      SUM(CASE WHEN s.result = 'defeat' THEN 1 ELSE 0 END) as losses,
+      SUM(CASE WHEN EXISTS (
+        SELECT 1 FROM battles b WHERE b.set_id = s.id AND b.is_star_player = 1
+      ) THEN 1 ELSE 0 END) as star_player_count
+    FROM sets s
+    WHERE s.player_tag = ? AND s.completed = 1
   `).get(playerTag);
 
-  const setStats = db.prepare(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN result = 'victory' THEN 1 ELSE 0 END) as wins,
-      SUM(CASE WHEN result = 'defeat' THEN 1 ELSE 0 END) as losses
-    FROM sets WHERE player_tag = ? AND completed = 1
-  `).get(playerTag);
+  // setStats is now the same as overall (everything is set-based)
+  const setStats = overall;
 
+  // Per-brawler stats based on sets
+  // Uses the brawler from the first game of each set
   const byBrawler = db.prepare(`
     SELECT
-      brawler_name,
-      brawler_id,
-      COUNT(*) as total,
-      SUM(CASE WHEN result = 'victory' THEN 1 ELSE 0 END) as wins,
-      SUM(CASE WHEN result = 'defeat' THEN 1 ELSE 0 END) as losses,
-      SUM(is_star_player) as star_player_count
-    FROM battles WHERE player_tag = ?
-    GROUP BY brawler_name
+      b.brawler_name,
+      b.brawler_id,
+      COUNT(DISTINCT s.id) as total,
+      SUM(CASE WHEN s.result = 'victory' THEN 1 ELSE 0 END) as wins,
+      SUM(CASE WHEN s.result = 'defeat' THEN 1 ELSE 0 END) as losses,
+      SUM(CASE WHEN EXISTS (
+        SELECT 1 FROM battles b2 WHERE b2.set_id = s.id AND b2.is_star_player = 1
+      ) THEN 1 ELSE 0 END) as star_player_count
+    FROM sets s
+    JOIN battles b ON b.set_id = s.id AND b.set_game_number = 1
+    WHERE s.player_tag = ? AND s.completed = 1
+    GROUP BY b.brawler_name
     ORDER BY total DESC
   `).all(playerTag);
 

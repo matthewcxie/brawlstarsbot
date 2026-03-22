@@ -16,9 +16,8 @@ function buildSetEmbed(set, battles, playerTag) {
   const mode = firstBattle?.mode || 'unknown';
   const mapImage = getMapImage(mapName);
 
-  const isSoloRanked = battles.length === 1 && battles[0]?.battle_type === 'soloRanked';
-  const titlePrefix = isSoloRanked ? 'Solo Ranked' : 'Ranked Set';
-  const scoreText = isSoloRanked ? '' : `\n\n📊 **Set Score: ${set.wins} - ${set.losses}**`;
+  const titlePrefix = 'Ranked Set';
+  const scoreText = `\n\n📊 **Set Score: ${set.wins} - ${set.losses}**`;
 
   const embed = new EmbedBuilder()
     .setColor(color)

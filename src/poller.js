@@ -58,10 +58,9 @@ async function processPlayer(player, client) {
   // 1. Fetch battle log
   const battles = await getBattleLog(player.tag);
 
-  // 2. Filter to ranked battles (soloRanked and ranked/teamRanked)
-  const rankedTypes = new Set(['soloRanked', 'teamRanked', 'ranked']);
+  // 2. Filter to soloRanked only (team ranked excluded for now)
   const rankedBattles = battles.filter(b =>
-    b.battle && rankedTypes.has(b.battle.type),
+    b.battle && b.battle.type === 'soloRanked',
   );
 
   if (rankedBattles.length === 0) return;
@@ -127,30 +126,17 @@ function extractBattleData(raw, playerTag) {
 }
 
 /**
- * Group unassigned battles into sets.
+ * Group unassigned battles into best-of-3 sets.
  *
- * - ranked (team ranked): bo3 — group consecutive games within 5 min
- * - soloRanked: bo1 — each game is its own completed set
+ * Both soloRanked and ranked (team ranked) are bo3 for mythic players.
+ * Games within 5 minutes of each other are grouped into the same set.
+ * A set completes when one side reaches 2 wins.
  */
 function groupBattlesIntoSets(playerTag) {
   const unassigned = getUnassignedBattles(playerTag);
   if (unassigned.length === 0) return;
 
   for (const battle of unassigned) {
-    // soloRanked = best of 1, each game is its own set
-    if (battle.battle_type === 'soloRanked') {
-      const setId = crypto.randomUUID();
-      createSet(setId, playerTag, battle.battle_time);
-      assignBattleToSet(battle.id, setId, 1);
-      const wins = battle.result === 'victory' ? 1 : 0;
-      const losses = battle.result === 'defeat' ? 1 : 0;
-      updateSetScore(setId, wins, losses);
-      // Force complete immediately since bo1
-      forceCompleteSet(setId);
-      continue;
-    }
-
-    // ranked (team ranked) = best of 3
     let activeSet = getIncompleteSet(playerTag);
 
     if (activeSet) {
@@ -210,13 +196,8 @@ async function postCompletedSets(client) {
     try {
       const battles = getSetBattles(set.id);
 
-      // Determine if this is a valid completed set:
-      // - soloRanked: 1 game is valid (bo1)
-      // - ranked: need at least 2 games with a 2-win result (bo3)
-      const isSoloRanked = battles.length === 1 && battles[0].battle_type === 'soloRanked';
-      const isValidBo3 = battles.length >= 2 && (set.wins >= 2 || set.losses >= 2);
-
-      if (!isSoloRanked && !isValidBo3) {
+      // Only post proper bo3 sets (at least 2 games, with a 2-win result)
+      if (battles.length < 2 || (set.wins < 2 && set.losses < 2)) {
         markSetPosted(set.id); // Skip incomplete/invalid sets
         continue;
       }
