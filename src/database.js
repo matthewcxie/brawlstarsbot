@@ -45,6 +45,26 @@ function initDb() {
       completed INTEGER DEFAULT 0,
       posted INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS pic_allowed_users (
+      user_id TEXT PRIMARY KEY,
+      added_by TEXT NOT NULL,
+      added_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS pic_library (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      image_url TEXT NOT NULL,
+      added_by TEXT NOT NULL,
+      added_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS pic_daily (
+      date TEXT PRIMARY KEY,
+      pic_id INTEGER NOT NULL,
+      FOREIGN KEY (pic_id) REFERENCES pic_library(id) ON DELETE CASCADE
+    );
   `);
 
   console.log('Database initialized.');
@@ -221,6 +241,81 @@ function getPlayerStats(playerTag) {
   return { overall, setStats, byBrawler };
 }
 
+// ── Pic Allowed Users ──
+
+function addAllowedUser(userId, addedBy) {
+  return db.prepare(
+    'INSERT OR IGNORE INTO pic_allowed_users (user_id, added_by) VALUES (?, ?)',
+  ).run(userId, addedBy);
+}
+
+function removeAllowedUser(userId) {
+  return db.prepare('DELETE FROM pic_allowed_users WHERE user_id = ?').run(userId);
+}
+
+function getAllAllowedUsers() {
+  return db.prepare('SELECT * FROM pic_allowed_users').all();
+}
+
+function isAllowedUser(userId) {
+  return !!db.prepare('SELECT 1 FROM pic_allowed_users WHERE user_id = ?').get(userId);
+}
+
+// ── Pic Library ──
+
+function addPic(name, imageUrl, addedBy) {
+  return db.prepare(
+    'INSERT INTO pic_library (name, image_url, added_by) VALUES (?, ?, ?)',
+  ).run(name, imageUrl, addedBy);
+}
+
+function removePic(id) {
+  return db.prepare('DELETE FROM pic_library WHERE id = ?').run(id);
+}
+
+function getPicsByName(name) {
+  return db.prepare(
+    'SELECT * FROM pic_library WHERE LOWER(name) = LOWER(?) ORDER BY id',
+  ).all(name);
+}
+
+function getRandomPicByName(name) {
+  return db.prepare(
+    'SELECT * FROM pic_library WHERE LOWER(name) = LOWER(?) ORDER BY RANDOM() LIMIT 1',
+  ).get(name);
+}
+
+function getRandomPic() {
+  return db.prepare('SELECT * FROM pic_library ORDER BY RANDOM() LIMIT 1').get();
+}
+
+function getAllPicNames() {
+  return db.prepare(
+    'SELECT LOWER(name) as name, COUNT(*) as count FROM pic_library GROUP BY LOWER(name) ORDER BY name',
+  ).all();
+}
+
+function getPicById(id) {
+  return db.prepare('SELECT * FROM pic_library WHERE id = ?').get(id);
+}
+
+// ── Pic Daily ──
+
+function setDailyPic(date, picId) {
+  return db.prepare(
+    'INSERT OR REPLACE INTO pic_daily (date, pic_id) VALUES (?, ?)',
+  ).run(date, picId);
+}
+
+function getDailyPic(date) {
+  return db.prepare(`
+    SELECT pd.date, pd.pic_id, pl.name, pl.image_url
+    FROM pic_daily pd
+    JOIN pic_library pl ON pd.pic_id = pl.id
+    WHERE pd.date = ?
+  `).get(date);
+}
+
 module.exports = {
   initDb, getDb,
   addPlayer, getPlayer, getPlayerByName, getAllMythicPlayers, toggleMythic,
@@ -228,4 +323,7 @@ module.exports = {
   createSet, getIncompleteSet, updateSetScore, getUnpostedCompletedSets, markSetPosted,
   getStaleSets, forceCompleteSet,
   getPlayerStats,
+  addAllowedUser, removeAllowedUser, getAllAllowedUsers, isAllowedUser,
+  addPic, removePic, getPicsByName, getRandomPicByName, getRandomPic, getAllPicNames, getPicById,
+  setDailyPic, getDailyPic,
 };

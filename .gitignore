@@ -3,3 +3,7 @@ data/*.db
 .env
 .env.local
 .env*.local
+
+# Private features
+commands/pic/
+src/dailyPic.js
