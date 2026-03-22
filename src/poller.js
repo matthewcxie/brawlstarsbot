@@ -200,6 +200,13 @@ async function postCompletedSets(client) {
   for (const set of unposted) {
     try {
       const battles = getSetBattles(set.id);
+
+      // Only post proper bo3 sets (at least 2 games, with a 2-win result)
+      if (battles.length < 2 || (set.wins < 2 && set.losses < 2)) {
+        markSetPosted(set.id); // Mark as posted to skip it in future
+        continue;
+      }
+
       const embed = buildSetEmbed(set, battles, set.player_tag);
 
       // Post to all results channels
@@ -220,12 +227,21 @@ async function postCompletedSets(client) {
 
 /**
  * Close sets that have been open for too long (player quit mid-set).
+ * Sets with fewer than 2 games are silently discarded — they were
+ * likely the first game of a bo3 that never continued.
  */
 function closeStalesSets() {
   const stale = getStaleSets(STALE_SET_MINUTES);
   for (const set of stale) {
-    forceCompleteSet(set.id);
-    console.log(`⏰ Auto-closed stale set ${set.id} for ${set.player_tag} (${set.wins}-${set.losses})`);
+    const battles = getSetBattles(set.id);
+    if (battles.length < 2) {
+      // Not a real set — silently close without posting
+      forceCompleteSet(set.id);
+      markSetPosted(set.id);
+    } else {
+      forceCompleteSet(set.id);
+      console.log(`⏰ Auto-closed stale set ${set.id} for ${set.player_tag} (${set.wins}-${set.losses})`);
+    }
   }
 }
 
