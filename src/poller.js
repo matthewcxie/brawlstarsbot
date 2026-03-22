@@ -58,9 +58,10 @@ async function processPlayer(player, client) {
   // 1. Fetch battle log
   const battles = await getBattleLog(player.tag);
 
-  // 2. Filter to team ranked battles only (bo3 format in mythic+)
+  // 2. Filter to ranked battles (soloRanked and ranked/teamRanked)
+  const rankedTypes = new Set(['soloRanked', 'teamRanked', 'ranked']);
   const rankedBattles = battles.filter(b =>
-    b.battle && b.battle.type === 'ranked',
+    b.battle && rankedTypes.has(b.battle.type),
   );
 
   if (rankedBattles.length === 0) return;
@@ -113,6 +114,7 @@ function extractBattleData(raw, playerTag) {
   return {
     player_tag: playerTag,
     battle_time: raw.battleTime,
+    battle_type: battle.type,
     mode: event.mode || battle.mode,
     map: event.map,
     result: battle.result,
@@ -125,33 +127,40 @@ function extractBattleData(raw, playerTag) {
 }
 
 /**
- * Group unassigned battles into best-of-3 sets.
+ * Group unassigned battles into sets.
  *
- * Algorithm:
- * - Get all unassigned battles for this player, ordered by time ASC
- * - For each battle, check if there's an active (incomplete) set
- * - If the time gap from the last game in that set is ≤ 5 minutes, add to set
- * - Otherwise, create a new set
- * - When a set reaches 2 wins or 2 losses, mark it complete
+ * - ranked (team ranked): bo3 — group consecutive games within 5 min
+ * - soloRanked: bo1 — each game is its own completed set
  */
 function groupBattlesIntoSets(playerTag) {
   const unassigned = getUnassignedBattles(playerTag);
   if (unassigned.length === 0) return;
 
   for (const battle of unassigned) {
+    // soloRanked = best of 1, each game is its own set
+    if (battle.battle_type === 'soloRanked') {
+      const setId = crypto.randomUUID();
+      createSet(setId, playerTag, battle.battle_time);
+      assignBattleToSet(battle.id, setId, 1);
+      const wins = battle.result === 'victory' ? 1 : 0;
+      const losses = battle.result === 'defeat' ? 1 : 0;
+      updateSetScore(setId, wins, losses);
+      // Force complete immediately since bo1
+      forceCompleteSet(setId);
+      continue;
+    }
+
+    // ranked (team ranked) = best of 3
     let activeSet = getIncompleteSet(playerTag);
 
     if (activeSet) {
-      // Get the last battle in this set to check time gap
       const setBattles = getSetBattles(activeSet.id);
       const lastBattle = setBattles[setBattles.length - 1];
 
       if (lastBattle && timeDiffMinutes(lastBattle.battle_time, battle.battle_time) <= SET_TIME_GAP_MINUTES) {
-        // Add to existing set
         const gameNumber = setBattles.length + 1;
         assignBattleToSet(battle.id, activeSet.id, gameNumber);
 
-        // Update set score
         const newWins = activeSet.wins + (battle.result === 'victory' ? 1 : 0);
         const newLosses = activeSet.losses + (battle.result === 'defeat' ? 1 : 0);
         updateSetScore(activeSet.id, newWins, newLosses);
@@ -201,9 +210,14 @@ async function postCompletedSets(client) {
     try {
       const battles = getSetBattles(set.id);
 
-      // Only post proper bo3 sets (at least 2 games, with a 2-win result)
-      if (battles.length < 2 || (set.wins < 2 && set.losses < 2)) {
-        markSetPosted(set.id); // Mark as posted to skip it in future
+      // Determine if this is a valid completed set:
+      // - soloRanked: 1 game is valid (bo1)
+      // - ranked: need at least 2 games with a 2-win result (bo3)
+      const isSoloRanked = battles.length === 1 && battles[0].battle_type === 'soloRanked';
+      const isValidBo3 = battles.length >= 2 && (set.wins >= 2 || set.losses >= 2);
+
+      if (!isSoloRanked && !isValidBo3) {
+        markSetPosted(set.id); // Skip incomplete/invalid sets
         continue;
       }
 

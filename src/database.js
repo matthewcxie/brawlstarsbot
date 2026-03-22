@@ -21,6 +21,7 @@ function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       player_tag TEXT NOT NULL,
       battle_time TEXT NOT NULL,
+      battle_type TEXT,
       mode TEXT,
       map TEXT,
       result TEXT,
@@ -72,6 +73,14 @@ function initDb() {
     );
   `);
 
+  // Migration: add battle_type column if missing
+  const cols = db.prepare("PRAGMA table_info(battles)").all().map(c => c.name);
+  if (!cols.includes('battle_type')) {
+    db.exec("ALTER TABLE battles ADD COLUMN battle_type TEXT");
+    // Backfill existing battles as 'ranked' since that's all we tracked before
+    db.exec("UPDATE battles SET battle_type = 'ranked' WHERE battle_type IS NULL");
+  }
+
   console.log('Database initialized.');
   return db;
 }
@@ -119,13 +128,14 @@ function toggleMythic(tag) {
 function insertBattle(battle) {
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO battles
-      (player_tag, battle_time, mode, map, result, is_star_player,
+      (player_tag, battle_time, battle_type, mode, map, result, is_star_player,
        brawler_name, brawler_id, duration, teams_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   return stmt.run(
     battle.player_tag,
     battle.battle_time,
+    battle.battle_type,
     battle.mode,
     battle.map,
     battle.result,

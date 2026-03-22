@@ -16,10 +16,14 @@ function buildSetEmbed(set, battles, playerTag) {
   const mode = firstBattle?.mode || 'unknown';
   const mapImage = getMapImage(mapName);
 
+  const isSoloRanked = battles.length === 1 && battles[0]?.battle_type === 'soloRanked';
+  const titlePrefix = isSoloRanked ? 'Solo Ranked' : 'Ranked Set';
+  const scoreText = isSoloRanked ? '' : `\n\n📊 **Set Score: ${set.wins} - ${set.losses}**`;
+
   const embed = new EmbedBuilder()
     .setColor(color)
-    .setTitle(`${isVictory ? '🏆' : '💀'} Ranked Set — ${resultText}`)
-    .setDescription(`${modeEmoji(mode)} **${formatModeName(mode)}** on **${mapName}**\n\n📊 **Set Score: ${set.wins} - ${set.losses}**`);
+    .setTitle(`${isVictory ? '🏆' : '💀'} ${titlePrefix} — ${resultText}`)
+    .setDescription(`${modeEmoji(mode)} **${formatModeName(mode)}** on **${mapName}**${scoreText}`);
 
   // Map image as the large header image
   if (mapImage) {
