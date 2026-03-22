@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getPlayerByName, toggleMythic } = require('../../src/database');
+const { getPlayerByName, toggleMythic, getAllPlayerNames } = require('../../src/database');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -9,7 +9,8 @@ module.exports = {
       option
         .setName('player_name')
         .setDescription('The player\'s in-game name')
-        .setRequired(true),
+        .setRequired(true)
+        .setAutocomplete(true),
     )
     .addStringOption(option =>
       option
@@ -17,6 +18,15 @@ module.exports = {
         .setDescription('Admin password')
         .setRequired(true),
     ),
+
+  async autocomplete(interaction) {
+    const focused = interaction.options.getFocused().toLowerCase();
+    const names = getAllPlayerNames();
+    const filtered = names
+      .filter(n => n.toLowerCase().includes(focused))
+      .slice(0, 25);
+    await interaction.respond(filtered.map(name => ({ name, value: name })));
+  },
 
   async execute(interaction) {
     // Always ephemeral so the password isn't visible

@@ -1,4 +1,5 @@
 const BRAWLAPI_MAPS_URL = 'https://api.brawlapi.com/v1/maps';
+const BRAWLER_IMAGE_BASE = 'https://cdn.brawlify.com/brawlers/borders';
 
 let mapCache = new Map();
 let lastFetch = 0;
@@ -37,4 +38,9 @@ function getMapImage(mapName) {
   return mapCache.get(mapName.toLowerCase()) || null;
 }
 
-module.exports = { loadMapData, getMapImage };
+function getBrawlerImage(brawlerId) {
+  if (!brawlerId) return null;
+  return `${BRAWLER_IMAGE_BASE}/${brawlerId}.png`;
+}
+
+module.exports = { loadMapData, getMapImage, getBrawlerImage };

@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getPlayerByName, getPlayerStats } = require('../../src/database');
+const { getPlayerByName, getPlayerStats, getAllPlayerNames } = require('../../src/database');
 const { formatWinRate, resultEmoji } = require('../../src/utils');
 
 module.exports = {
@@ -10,8 +10,18 @@ module.exports = {
       option
         .setName('name')
         .setDescription('The player\'s in-game name')
-        .setRequired(true),
+        .setRequired(true)
+        .setAutocomplete(true),
     ),
+
+  async autocomplete(interaction) {
+    const focused = interaction.options.getFocused().toLowerCase();
+    const names = getAllPlayerNames();
+    const filtered = names
+      .filter(n => n.toLowerCase().includes(focused))
+      .slice(0, 25);
+    await interaction.respond(filtered.map(name => ({ name, value: name })));
+  },
 
   async execute(interaction) {
     await interaction.deferReply();

@@ -65,6 +65,11 @@ function initDb() {
       pic_id INTEGER NOT NULL,
       FOREIGN KEY (pic_id) REFERENCES pic_library(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS pic_aliases (
+      alias TEXT PRIMARY KEY,
+      target TEXT NOT NULL
+    );
   `);
 
   console.log('Database initialized.');
@@ -91,6 +96,10 @@ function getPlayer(tag) {
 
 function getPlayerByName(name) {
   return db.prepare('SELECT * FROM players WHERE LOWER(name) = LOWER(?)').get(name);
+}
+
+function getAllPlayerNames() {
+  return db.prepare('SELECT name FROM players ORDER BY name').all().map(r => r.name);
 }
 
 function getAllMythicPlayers() {
@@ -241,6 +250,10 @@ function getPlayerStats(playerTag) {
   return { overall, setStats, byBrawler };
 }
 
+function getAllBattlesForPlayer(playerTag) {
+  return db.prepare('SELECT * FROM battles WHERE player_tag = ?').all(playerTag);
+}
+
 // ── Pic Allowed Users ──
 
 function addAllowedUser(userId, addedBy) {
@@ -274,15 +287,22 @@ function removePic(id) {
 }
 
 function getPicsByName(name) {
+  const resolved = resolveAlias(name);
   return db.prepare(
     'SELECT * FROM pic_library WHERE LOWER(name) = LOWER(?) ORDER BY id',
-  ).all(name);
+  ).all(resolved);
+}
+
+function resolveAlias(name) {
+  const alias = db.prepare('SELECT target FROM pic_aliases WHERE alias = LOWER(?)').get(name);
+  return alias ? alias.target : name;
 }
 
 function getRandomPicByName(name) {
+  const resolved = resolveAlias(name);
   return db.prepare(
     'SELECT * FROM pic_library WHERE LOWER(name) = LOWER(?) ORDER BY RANDOM() LIMIT 1',
-  ).get(name);
+  ).get(resolved);
 }
 
 function getRandomPic() {
@@ -318,11 +338,11 @@ function getDailyPic(date) {
 
 module.exports = {
   initDb, getDb,
-  addPlayer, getPlayer, getPlayerByName, getAllMythicPlayers, toggleMythic,
+  addPlayer, getPlayer, getPlayerByName, getAllPlayerNames, getAllMythicPlayers, toggleMythic,
   insertBattle, getUnassignedBattles, assignBattleToSet, getSetBattles, markBattlesPosted,
   createSet, getIncompleteSet, updateSetScore, getUnpostedCompletedSets, markSetPosted,
   getStaleSets, forceCompleteSet,
-  getPlayerStats,
+  getPlayerStats, getAllBattlesForPlayer,
   addAllowedUser, removeAllowedUser, getAllAllowedUsers, isAllowedUser,
   addPic, removePic, getPicsByName, getRandomPicByName, getRandomPic, getAllPicNames, getPicById,
   setDailyPic, getDailyPic,

@@ -174,16 +174,26 @@ function groupBattlesIntoSets(playerTag) {
  * Post embeds for all completed but unposted sets.
  */
 async function postCompletedSets(client) {
-  const channelId = process.env.RESULTS_CHANNEL_ID;
-  if (!channelId) return;
+  const channelIds = (process.env.RESULTS_CHANNEL_IDS || process.env.RESULTS_CHANNEL_ID || '')
+    .split(',')
+    .map(id => id.trim())
+    .filter(Boolean);
 
-  const channel = client.channels.cache.get(channelId)
-    || await client.channels.fetch(channelId).catch(() => null);
+  if (channelIds.length === 0) return;
 
-  if (!channel) {
-    console.warn(`Results channel ${channelId} not found.`);
-    return;
+  // Resolve all channels
+  const channels = [];
+  for (const id of channelIds) {
+    const channel = client.channels.cache.get(id)
+      || await client.channels.fetch(id).catch(() => null);
+    if (channel) {
+      channels.push(channel);
+    } else {
+      console.warn(`Results channel ${id} not found.`);
+    }
   }
+
+  if (channels.length === 0) return;
 
   const unposted = getUnpostedCompletedSets();
 
@@ -192,7 +202,12 @@ async function postCompletedSets(client) {
       const battles = getSetBattles(set.id);
       const embed = buildSetEmbed(set, battles, set.player_tag);
 
-      await channel.send({ embeds: [embed] });
+      // Post to all results channels
+      for (const channel of channels) {
+        await channel.send({ embeds: [embed] }).catch(err =>
+          console.error(`Failed to post to ${channel.id}:`, err.message),
+        );
+      }
 
       markSetPosted(set.id);
       markBattlesPosted(set.id);

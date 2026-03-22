@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getMapImage } = require('./mapImages');
+const { getMapImage, getBrawlerImage } = require('./mapImages');
 const { resultEmoji, modeEmoji, formatModeName } = require('./utils');
 
 /**
@@ -19,66 +19,46 @@ function buildSetEmbed(set, battles, playerTag) {
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(`${isVictory ? '🏆' : '💀'} Ranked Set — ${resultText}`)
-    .setDescription(`${modeEmoji(mode)} **${formatModeName(mode)}** on **${mapName}**`);
+    .setDescription(`${modeEmoji(mode)} **${formatModeName(mode)}** on **${mapName}**\n\n📊 **Set Score: ${set.wins} - ${set.losses}**`);
 
+  // Map image as the main image
   if (mapImage) {
-    embed.setThumbnail(mapImage);
+    embed.setImage(mapImage);
   }
 
-  // Set score
-  embed.addFields({
-    name: '📊 Set Score',
-    value: `**${set.wins}** - **${set.losses}**`,
-    inline: false,
-  });
-
-  // Individual game results
+  // Individual game results with brawlers played
   for (const battle of battles) {
     const gameResult = battle.result === 'victory' ? '✅ Win' : '❌ Loss';
     const starText = battle.is_star_player ? ' ⭐' : '';
     const duration = battle.duration ? `${Math.floor(battle.duration / 60)}:${String(battle.duration % 60).padStart(2, '0')}` : '?:??';
 
+    // Get all brawlers played in this game
+    const brawlerLines = getBrawlerSummary(battle);
+
     embed.addFields({
-      name: `Game ${battle.set_game_number}`,
-      value: `${gameResult}${starText}\n🎮 ${battle.brawler_name || 'Unknown'}\n⏱️ ${duration}`,
-      inline: true,
+      name: `Game ${battle.set_game_number} — ${gameResult}${starText}`,
+      value: `🎮 ${battle.brawler_name || 'Unknown'} • ⏱️ ${duration}\n${brawlerLines}`,
+      inline: false,
     });
   }
 
-  // Team rosters from the first battle (teams are the same across a set)
-  const teamsData = parseTeams(firstBattle);
+  // Team rosters with brawlers from the most recent game
+  const lastBattle = battles[battles.length - 1];
+  const teamsData = parseTeamsWithBrawlers(lastBattle);
   if (teamsData) {
-    const { team1Lines, team2Lines } = teamsData;
     embed.addFields(
-      { name: '\u200b', value: '\u200b', inline: false }, // spacer
-      { name: '🔵 Team', value: team1Lines.join('\n'), inline: true },
-      { name: '🔴 Opponent', value: team2Lines.join('\n'), inline: true },
+      { name: '\u200b', value: '\u200b', inline: false },
+      { name: '🔵 Your Team', value: teamsData.team1Lines.join('\n'), inline: true },
+      { name: '🔴 Opponent', value: teamsData.team2Lines.join('\n'), inline: true },
     );
   }
 
-  // Star player from each game
-  const starPlayers = battles
-    .map(b => {
-      const teams = safeParse(b.teams_json);
-      if (!teams) return null;
-      // Find star player in teams data
-      for (const team of teams) {
-        for (const p of team) {
-          if (p.tag === getStarPlayerTag(b)) {
-            return `Game ${b.set_game_number}: **${p.name}** (${p.brawler?.name || '?'})`;
-          }
-        }
-      }
-      return null;
-    })
-    .filter(Boolean);
-
-  if (starPlayers.length > 0) {
-    embed.addFields({
-      name: '⭐ Star Players',
-      value: starPlayers.join('\n'),
-      inline: false,
-    });
+  // Brawler icon as thumbnail (tracked player's brawler from first game)
+  if (firstBattle?.brawler_id) {
+    const brawlerImg = getBrawlerImage(firstBattle.brawler_id);
+    if (brawlerImg) {
+      embed.setThumbnail(brawlerImg);
+    }
   }
 
   embed.setTimestamp(new Date());
@@ -86,7 +66,7 @@ function buildSetEmbed(set, battles, playerTag) {
 }
 
 /**
- * Build an embed for a single ranked game (used as fallback).
+ * Build an embed for a single ranked game.
  */
 function buildGameEmbed(battle) {
   const isVictory = battle.result === 'victory';
@@ -99,7 +79,11 @@ function buildGameEmbed(battle) {
     .setDescription(`${modeEmoji(battle.mode)} **${formatModeName(battle.mode)}**`);
 
   if (mapImage) {
-    embed.setThumbnail(mapImage);
+    embed.setImage(mapImage);
+  }
+
+  if (battle.brawler_id) {
+    embed.setThumbnail(getBrawlerImage(battle.brawler_id));
   }
 
   const starText = battle.is_star_player ? ' ⭐' : '';
@@ -108,10 +92,10 @@ function buildGameEmbed(battle) {
     { name: 'Brawler', value: battle.brawler_name || 'Unknown', inline: true },
   );
 
-  const teamsData = parseTeams(battle);
+  const teamsData = parseTeamsWithBrawlers(battle);
   if (teamsData) {
     embed.addFields(
-      { name: '🔵 Team', value: teamsData.team1Lines.join('\n'), inline: true },
+      { name: '🔵 Your Team', value: teamsData.team1Lines.join('\n'), inline: true },
       { name: '🔴 Opponent', value: teamsData.team2Lines.join('\n'), inline: true },
     );
   }
@@ -130,11 +114,36 @@ function safeParse(json) {
   }
 }
 
-function parseTeams(battle) {
+/**
+ * Get a compact summary of brawlers from both teams for a game.
+ */
+function getBrawlerSummary(battle) {
+  const teams = safeParse(battle.teams_json);
+  if (!teams || teams.length < 2) return '';
+
+  let playerTeamIndex = 0;
+  for (let i = 0; i < teams.length; i++) {
+    for (const p of teams[i]) {
+      if (p.tag === battle.player_tag) {
+        playerTeamIndex = i;
+      }
+    }
+  }
+  const opponentTeamIndex = playerTeamIndex === 0 ? 1 : 0;
+
+  const teamBrawlers = teams[playerTeamIndex].map(p => p.brawler?.name || '?').join(', ');
+  const oppBrawlers = teams[opponentTeamIndex].map(p => p.brawler?.name || '?').join(', ');
+
+  return `🔵 ${teamBrawlers}\n🔴 ${oppBrawlers}`;
+}
+
+/**
+ * Parse teams with brawler names and icons for display.
+ */
+function parseTeamsWithBrawlers(battle) {
   const teams = safeParse(battle.teams_json);
   if (!teams || teams.length < 2) return null;
 
-  // Determine which team the tracked player is on
   let playerTeamIndex = 0;
   for (let i = 0; i < teams.length; i++) {
     for (const p of teams[i]) {
@@ -148,7 +157,8 @@ function parseTeams(battle) {
 
   const formatPlayer = (p, isTracked) => {
     const name = isTracked ? `**${p.name}**` : p.name;
-    return `${name} (${p.brawler?.name || '?'})`;
+    const brawler = p.brawler?.name || '?';
+    return `${name}\n└ ${brawler}`;
   };
 
   const team1Lines = teams[playerTeamIndex].map(p =>
@@ -159,17 +169,6 @@ function parseTeams(battle) {
   );
 
   return { team1Lines, team2Lines };
-}
-
-function getStarPlayerTag(battle) {
-  const teams = safeParse(battle.teams_json);
-  if (!teams) return null;
-  // The star player info is stored in the raw API data within teams_json
-  // We check if the tracked player was star player via is_star_player flag
-  // For display, we'd need the original starPlayer field — stored separately would be ideal
-  // For now, if is_star_player is set, return the player_tag
-  if (battle.is_star_player) return battle.player_tag;
-  return null;
 }
 
 module.exports = { buildSetEmbed, buildGameEmbed };
