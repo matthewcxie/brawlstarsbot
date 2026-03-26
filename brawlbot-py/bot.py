@@ -14,7 +14,6 @@ class BrawlBot(commands.Bot):
     async def setup_hook(self):
         await db.init_db()
         await self.load_extension("cogs.tracker")
-        await self.load_extension("cogs.pics")
 
         # Sync slash commands (guild-scoped for faster updates during dev)
         if GUILD_ID:

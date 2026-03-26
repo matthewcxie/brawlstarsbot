@@ -7,7 +7,7 @@ from discord.ext import commands, tasks
 
 import db
 from api import get_player as api_get_player, get_battle_log, BrawlAPIError
-from config import SET_TIME_GAP_MINUTES, STALE_SET_MINUTES, RESULTS_CHANNEL_IDS, MYTHIC_PASSWORD, PIC_ADMIN_ID
+from config import SET_TIME_GAP_MINUTES, STALE_SET_MINUTES, RESULTS_CHANNEL_IDS, MYTHIC_PASSWORD, ADMIN_ID
 from embeds import build_set_embed
 from map_cache import load_map_data
 from utils import normalize_tag, time_diff_minutes, format_win_rate
@@ -199,7 +199,7 @@ class TrackerCog(commands.Cog):
     async def reset(self, interaction: discord.Interaction, name: str):
         await interaction.response.defer(ephemeral=True)
 
-        if str(interaction.user.id) != PIC_ADMIN_ID:
+        if str(interaction.user.id) != ADMIN_ID:
             await interaction.followup.send("\u274c Only the bot owner can use this command.", ephemeral=True)
             return
 
